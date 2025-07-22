@@ -1,74 +1,56 @@
-# pdf_utils.py
-from fpdf import FPDF
-
-class PDF(FPDF):
-    def header(self):
-        # Header is usually not used for resumes, but kept for FPDF structure
-        # self.set_font('Arial', 'B', 16)
-        # self.cell(0, 10, self.title, 0, 1, 'C')
-        # self.ln(10)
-        pass
-
-    def chapter_title(self, title):
-        self.set_font('Arial', 'B', 14)
-        self.cell(0, 10, title, 0, 1, 'L')
-        self.set_line_width(0.5)
-        # Draw a line under the title
-        self.line(self.get_x(), self.get_y(), self.get_x() + self.w - 2*self.l_margin, self.get_y())
-        self.ln(5)
-
-    def chapter_body(self, body):
-        self.set_font('Arial', '', 12)
-        # Replace common markdown bullet points with a PDF-friendly character
-        body = body.replace('* ', '• ')
-        body = body.replace('- ', '• ')
-        self.multi_cell(0, 7, body)
-        self.ln(10)
+from reportlab.lib.pagesizes import LETTER
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, HRFlowable
+from reportlab.lib.units import inch
+from reportlab.lib import colors
+from io import BytesIO
 
 def create_resume_pdf(resume_data):
-    """
-    Creates a PDF of the resume data.
-    resume_data is a dictionary with keys like 'name', 'email', 'phone', 'linkedin',
-    'summary', 'experience', 'education', 'skills'.
-    """
-    pdf = PDF()
-    pdf.set_auto_page_break(auto_page_break=True, margin=15)
-    pdf.add_page()
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=LETTER,
+        leftMargin=1 * inch,
+        rightMargin=1 * inch,
+        topMargin=1 * inch,
+        bottomMargin=1 * inch
+    )
 
-    # Personal Information
-    pdf.set_font('Arial', 'B', 24)
-    pdf.cell(0, 10, resume_data.get('name', 'Your Name'), 0, 1, 'C')
-    pdf.set_font('Arial', '', 12)
-    contact_info = []
-    if resume_data.get('email'):
-        contact_info.append(resume_data['email'])
-    if resume_data.get('phone'):
-        contact_info.append(resume_data['phone'])
-    if resume_data.get('linkedin'):
-        contact_info.append(resume_data['linkedin'])
-    pdf.cell(0, 7, " | ".join(contact_info), 0, 1, 'C')
-    pdf.ln(10)
+    styles = getSampleStyleSheet()
+    styles.add(ParagraphStyle(name='Heading', fontSize=14, leading=18, spaceAfter=6, spaceBefore=12, textColor=colors.HexColor("#2e4053")))
+    styles.add(ParagraphStyle(name='Body', fontSize=11, leading=14))
+    styles.add(ParagraphStyle(name='SectionTitle', fontSize=12, leading=14, spaceAfter=4, spaceBefore=8, textColor=colors.black, fontName='Helvetica-Bold'))
 
-    # Summary
-    if resume_data.get('summary'):
-        pdf.chapter_title('Summary')
-        pdf.chapter_body(resume_data['summary'])
+    content = []
 
-    # Experience
-    if resume_data.get('experience'):
-        pdf.chapter_title('Experience')
-        pdf.chapter_body(resume_data['experience'])
+    # --- Header ---
+    full_name = resume_data.get("name", "Your Name")
+    contact = " | ".join(filter(None, [resume_data.get("email"), resume_data.get("phone"), resume_data.get("linkedin")]))
 
-    # Education
-    if resume_data.get('education'):
-        pdf.chapter_title('Education')
-        pdf.chapter_body(resume_data['education'])
+    content.append(Paragraph(f"<b>{full_name}</b>", styles["Title"]))
+    content.append(Paragraph(contact, styles["Normal"]))
+    content.append(Spacer(1, 8))
+    content.append(HRFlowable(width="100%", color=colors.grey, thickness=1))
+    content.append(Spacer(1, 12))
 
-    # Skills
-    if resume_data.get('skills'):
-        pdf.chapter_title('Skills')
-        pdf.chapter_body(resume_data['skills'])
+    # --- Section builder with lines ---
+    def add_section(title, text):
+        if text:
+            content.append(Spacer(1, 6))
+            content.append(Paragraph(title, styles["SectionTitle"]))
+            content.append(HRFlowable(width="100%", color=colors.HexColor("#cccccc"), thickness=0.5))
+            content.append(Spacer(1, 6))
+            for line in text.strip().split('\n'):
+                if line.strip():
+                    content.append(Paragraph(line.strip(), styles["Body"]))
+            content.append(Spacer(1, 10))
 
-    # Output PDF as bytes
-    # 'S' returns as string, then encode to bytes. Latin1 is a safe encoding for PDF.
-    return pdf.output(dest='S').encode('latin1')
+    # --- Add Sections ---
+    add_section("Summary", resume_data.get("summary"))
+    add_section("Experience", resume_data.get("experience"))
+    add_section("Education", resume_data.get("education"))
+    add_section("Skills", resume_data.get("skills"))
+
+    # --- Build PDF ---
+    doc.build(content)
+    return buffer.getvalue()
