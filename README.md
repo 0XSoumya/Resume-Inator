@@ -1,1 +1,1 @@
-** AI based Resume builder and analyzer
+**AI based Resume builder and analyzer**
